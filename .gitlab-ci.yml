@@ -98,61 +98,31 @@ push_images:
 # ===== Stage 4: Deploy - نشر على Kubernetes =====
 deploy_to_k8s:
   stage: deploy
+  tags:
+    - minikube-local
   image:
     name: bitnami/kubectl:latest
     entrypoint: [""]
-  only: 
+  only:
     - main
   when: manual
   script:
     - |
       set -eo pipefail
-      
-      # التأكد من وجود المتغير
-      echo "📋 Checking KUBECONFIG_FILE variable..."
-      if [ -z "$KUBECONFIG_FILE" ]; then
-        echo "❌ ERROR: KUBECONFIG_FILE variable is not set!"
-        exit 1
-      fi
-      
-      # استخدام الملف مباشرة
-      export KUBECONFIG="$KUBECONFIG_FILE"
-      
-      # التحقق من الملف
-      echo "📄 Kubeconfig file location: $KUBECONFIG"
-      ls -lh "$KUBECONFIG"
-      echo ""
-      echo "📝 First few lines of kubeconfig:"
-      head -n 10 "$KUBECONFIG"
-      echo ""
-      
-      # التحقق من الاتصال بالـ cluster
-      echo "🔍 Checking cluster connection..."
-      kubectl config use-context minikube
+      export KUBECONFIG=/home/gitlab-runner/.kube/config
+
+      echo "🔍 Checking Kubernetes cluster..."
       kubectl get nodes
-      
-      # تحديث الـ backend deployment
-      echo "🚀 Updating backend deployment..."
+
+      echo "🚀 Deploying backend..."
       kubectl set image deployment/backend backend="$BACKEND_IMAGE" -n default
-      
-      # تحديث الـ frontend deployment
-      echo "🚀 Updating frontend deployment..."
+
+      echo "🚀 Deploying frontend..."
       kubectl set image deployment/frontend frontend="$FRONTEND_IMAGE" -n default
-      
-      # متابعة حالة الـ rollout للـ backend
-      echo "⏳ Waiting for backend rollout..."
+
+      echo "⏳ Waiting for rollout..."
       kubectl rollout status deployment/backend -n default --timeout=5m
-      
-      # متابعة حالة الـ rollout للـ frontend
-      echo "⏳ Waiting for frontend rollout..."
       kubectl rollout status deployment/frontend -n default --timeout=5m
-      
-      # عرض حالة الـ pods
-      echo "✅ Deployment completed! Current pods:"
-      kubectl get pods -n default -o wide
-  
-  retry:
-    max: 2
-    when:
-      - runner_system_failure
-      - stuck_or_timeout_failure
+
+      echo "✅ Deployment completed!"
+      kubec
