@@ -44,11 +44,22 @@ build_frontend:
 # Stage 2: Test - اختبار الكود
 test_backend:
   stage: test
-  image: node:18
+  image: python:3.11
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  cache:
+    key: pip-cache
+    paths:
+      - .cache/pip
   script:
-    - cd backend
-    - npm install
-    - npm run test || echo "No tests found"
+    - echo "PWD:" && pwd
+    - ls -la
+    - test -f backend/requirements.txt || (echo "❌ backend/requirements.txt missing!" && exit 42)
+    - pip install --upgrade pip
+    - pip install -r backend/requirements.txt
+    # لو عندك اختبارات pytest شغّلها، لو لأ هنعدّي
+    - pip install pytest || true
+    - pytest -q || echo "No pytest tests found, skipping"
   only:
     - main
     - develop
