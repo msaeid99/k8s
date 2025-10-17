@@ -101,16 +101,46 @@ deploy_to_k8s:
   image:
     name: bitnami/kubectl:latest
     entrypoint: [""]
-  only: [ "main" ]
+  only: 
+    - main
   when: manual
   script:
     - |
       set -eo pipefail
-      export KUBECONFIG="$KUBECONFIG_FILE"
+      
+      # إنشاء ملف kubeconfig من المتغير
+      mkdir -p ~/.kube
+      echo "$KUBECONFIG_FILE" > ~/.kube/config
+      chmod 600 ~/.kube/config
+      
+      # التحقق من الاتصال بالـ cluster
+      echo "🔍 Checking cluster connection..."
       kubectl config use-context minikube
       kubectl get nodes
+      
+      # تحديث الـ backend deployment
+      echo "🚀 Updating backend deployment..."
       kubectl set image deployment/backend backend="$BACKEND_IMAGE" -n default
+      
+      # تحديث الـ frontend deployment
+      echo "🚀 Updating frontend deployment..."
       kubectl set image deployment/frontend frontend="$FRONTEND_IMAGE" -n default
-      kubectl rollout status deployment/backend -n default
-      kubectl rollout status deployment/frontend -n default
-      kubectl get pods -n default
+      
+      # متابعة حالة الـ rollout للـ backend
+      echo "⏳ Waiting for backend rollout..."
+      kubectl rollout status deployment/backend -n default --timeout=5m
+      
+      # متابعة حالة الـ rollout للـ frontend
+      echo "⏳ Waiting for frontend rollout..."
+      kubectl rollout status deployment/frontend -n default --timeout=5m
+      
+      # عرض حالة الـ pods
+      echo "✅ Deployment completed! Current pods:"
+      kubectl get pods -n default -o wide
+  
+  # إضافة retry في حالة الفشل
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
