@@ -101,20 +101,13 @@ deploy_to_k8s:
   image:
     name: bitnami/kubectl:latest
     entrypoint: [""]
-  only:
-    - main
+  only: [ "main" ]
   when: manual
   script:
     - |
-      if [ -z "${KUBECONFIG_CONTENT:-}" ]; then
-        echo "❌ المتغير KUBECONFIG_CONTENT مش متعرف."
-        exit 1
-      fi
-
-      mkdir -p ~/.kube
-      printf '%s' "$KUBECONFIG_CONTENT" > ~/.kube/config
-
-      kubectl version --client
+      set -eo pipefail
+      export KUBECONFIG="$KUBECONFIG_FILE"
+      kubectl config use-context minikube
       kubectl get nodes
       kubectl set image deployment/backend backend="$BACKEND_IMAGE" -n default
       kubectl set image deployment/frontend frontend="$FRONTEND_IMAGE" -n default
