@@ -107,22 +107,24 @@ deploy_to_k8s:
     - main
   when: manual
   script:
-    - |
-      set -eo pipefail
-      export KUBECONFIG=/home/gitlab-runner/.kube/config
+  - |
+    set -euo pipefail
+    export KUBECONFIG=/home/gitlab-runner/.kube/config
+    NS=default
 
-      echo "🔍 Checking Kubernetes cluster..."
-      kubectl get nodes
+    echo "🔍 Checking Kubernetes cluster..."
+    kubectl get nodes
 
-      echo "🚀 Deploying backend..."
-      kubectl set image deployment/backend backend="$BACKEND_IMAGE" -n default
+    echo "🚀 Deploying backend..."
+    kubectl -n "$NS" set image deployment/backend  backend="$BACKEND_IMAGE"
 
-      echo "🚀 Deploying frontend..."
-      kubectl set image deployment/frontend frontend="$FRONTEND_IMAGE" -n default
+    echo "🚀 Deploying frontend..."
+    kubectl -n "$NS" set image deployment/frontend frontend="$FRONTEND_IMAGE"
 
-      echo "⏳ Waiting for rollout..."
-      kubectl rollout status deployment/backend -n default --timeout=5m
-      kubectl rollout status deployment/frontend -n default --timeout=5m
+    echo "⏳ Waiting for rollout..."
+    kubectl -n "$NS" rollout status deployment/backend  --timeout=5m
+    kubectl -n "$NS" rollout status deployment/frontend --timeout=5m
 
-      echo "✅ Deployment completed!"
-      kubec
+    echo "✅ Deployment completed!"
+    kubectl -n "$NS" get pods -o wide   # ← تأكد إن دي kubectl مش kubec
+    echo "🎉 Done."
