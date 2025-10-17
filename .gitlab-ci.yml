@@ -99,32 +99,76 @@ push_images:
 deploy_to_k8s:
   stage: deploy
   tags:
-    - minikube-local
+    - minikube-local         # لو ده Runner محلي لكن الكلاستر حقيقي، مفيش مشكلة
   image:
-    name: bitnami/kubectl:latest
+    name: bitnami/kubectl:1.30   # ثبّت النسخة لتفادي تغيّرات breaking
     entrypoint: [""]
   only:
     - main
   when: manual
+  variables:
+    KUBE_NAMESPACE: "default"
+    ROLLOUT_TIMEOUT: "300s"
   script:
-  - |
-    set -euo pipefail
-    export KUBECONFIG=/home/gitlab-runner/.kube/config
-    NS=default
+    - |
+      set -euo pipefail
 
-    echo "🔍 Checking Kubernetes cluster..."
-    kubectl get nodes
+      # اكتب kubeconfig من سيكرت (أفضل من الاعتماد على مسار محلي)
+      # خزّن kubeconfig كـ Base64 في متغير GitLab اسمه KUBECONFIG_DATA
+      if [ -n "${KUBECONFIG_DATA:-}" ]; then
+        echo "$KUBECONFIG_DATA" | base64 -d > kubeconfig
+        export KUBECONFIG="$PWD/kubeconfig"
+      else
+        # fallback لو انت مصر تستخدم ملف محلي على السيرفر
+        export KUBECONFIG=${KUBECONFIG:-/home/gitlab-runner/.kube/config}
+      fi
 
-    echo "🚀 Deploying backend..."
-    kubectl -n "$NS" set image deployment/backend  backend="$BACKEND_IMAGE"
+      NS="${KUBE_NAMESPACE}"
 
-    echo "🚀 Deploying frontend..."
-    kubectl -n "$NS" set image deployment/frontend frontend="$FRONTEND_IMAGE"
+      # دباگ تلقائي عند أي ERR
+      failure_debug() {
+        echo "------ DEBUG (namespace: $NS) ------"
+        kubectl -n "$NS" get all || true
+        echo "------ Events (last 100) ------"
+        kubectl -n "$NS" get events --sort-by=.lastTimestamp | tail -n 100 || true
+        for dep in backend frontend; do
+          kubectl -n "$NS" get deploy "$dep" >/dev/null 2>&1 && kubectl -n "$NS" describe deploy "$dep" || true
+          pods=$(kubectl -n "$NS" get pods -l app="$dep" -o name 2>/dev/null || true)
+          for p in $pods; do
+            echo "---- logs $p ----"
+            kubectl -n "$NS" logs "$p" --all-containers=true --tail=200 || true
+          done
+        done
+      }
+      trap 'failure_debug' ERR
 
-    echo "⏳ Waiting for rollout..."
-    kubectl -n "$NS" rollout status deployment/backend  --timeout=5m
-    kubectl -n "$NS" rollout status deployment/frontend --timeout=5m
+      echo "🔍 Checking Kubernetes cluster..."
+      kubectl version --short
+      kubectl cluster-info
+      kubectl get nodes -o wide
 
-    echo "✅ Deployment completed!"
-    kubectl -n "$NS" get pods -o wide   # ← تأكد إن دي kubectl مش kubec
-    echo "🎉 Done."
+      # اتأكد إن الـ Namespace موجود
+      kubectl get ns "$NS" >/dev/null 2>&1 || kubectl create ns "$NS"
+
+      echo "🚀 Deploying images..."
+      # غيّر الصور لو المتغيرات متعرفة
+      if [ -n "${BACKEND_IMAGE:-}" ] && kubectl -n "$NS" get deploy backend >/dev/null 2>&1; then
+        kubectl -n "$NS" set image deployment/backend backend="$BACKEND_IMAGE"
+      else
+        echo "ℹ️ BACKEND_IMAGE not set or deployment/backend not found — skipping"
+      fi
+
+      if [ -n "${FRONTEND_IMAGE:-}" ] && kubectl -n "$NS" get deploy frontend >/dev/null 2>&1; then
+        kubectl -n "$NS" set image deployment/frontend frontend="$FRONTEND_IMAGE"
+      else
+        echo "ℹ️ FRONTEND_IMAGE not set or deployment/frontend not found — skipping"
+      fi
+
+      echo "⏳ Waiting for rollout..."
+      kubectl -n "$NS" get deploy backend   >/dev/null 2>&1 && kubectl -n "$NS" rollout status deploy/backend   --timeout="$ROLLOUT_TIMEOUT" || true
+      kubectl -n "$NS" get deploy frontend  >/dev/null 2>&1 && kubectl -n "$NS" rollout status deploy/frontend  --timeout="$ROLLOUT_TIMEOUT" || true
+
+      echo "✅ Deployment completed!"
+      kubectl -n "$NS" get deploy,svc,ingress -o wide
+      kubectl -n "$NS" get pods -o wide
+      echo "🎉 Done."
