@@ -100,24 +100,24 @@ deploy_to_k8s:
   stage: deploy
   image:
     name: bitnami/kubectl:latest
-    entrypoint: [""]   # ضروري عشان نقدر نشغّل أوامر شِل عادية
-  when: manual
+    entrypoint: [""]
   only:
     - main
+  when: manual
   script:
     - |
-      set -euo pipefail
+      if [ -z "${KUBECONFIG_CONTENT:-}" ]; then
+        echo "❌ المتغير KUBECONFIG_CONTENT مش متعرف."
+        exit 1
+      fi
+
       mkdir -p ~/.kube
-      echo "$KUBECONFIG_CONTENT" > ~/.kube/config
+      printf '%s' "$KUBECONFIG_CONTENT" > ~/.kube/config
 
       kubectl version --client
-      kubectl config get-contexts || true
       kubectl get nodes
-
-      kubectl set image deployment/backend backend=$BACKEND_IMAGE -n default
-      kubectl set image deployment/frontend frontend=$FRONTEND_IMAGE -n default
-
+      kubectl set image deployment/backend backend="$BACKEND_IMAGE" -n default
+      kubectl set image deployment/frontend frontend="$FRONTEND_IMAGE" -n default
       kubectl rollout status deployment/backend -n default
       kubectl rollout status deployment/frontend -n default
-
       kubectl get pods -n default
