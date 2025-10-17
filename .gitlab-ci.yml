@@ -98,32 +98,26 @@ push_images:
 # ===== Stage 4: Deploy - نشر على Kubernetes =====
 deploy_to_k8s:
   stage: deploy
-  image: bitnami/kubectl:latest
-  entrypoint: [""]     # ضروري جدًا لأن الصورة بتشغّل kubectl كـ entrypoint افتراضي
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]     # ← كده صح
   before_script:
-    # تجهيز ملف kubeconfig من المتغير المخزَّن في GitLab
     - mkdir -p ~/.kube
     - echo "$KUBECONFIG_CONTENT" > ~/.kube/config
-    # اختبار الاتصال بالـ cluster
     - kubectl version --client
     - kubectl config get-contexts
     - kubectl get nodes || (echo "❌ لا يمكن الاتصال بالـ cluster" && exit 1)
   script:
-    # تحديث صور الـ Deployments في Kubernetes
-    - echo "🔄 تحديث صورة backend إلى: $BACKEND_IMAGE"
+    - echo "🔄 تحديث backend إلى: $BACKEND_IMAGE"
     - kubectl set image deployment/backend backend=$BACKEND_IMAGE -n default
-    - echo "🔄 تحديث صورة frontend إلى: $FRONTEND_IMAGE"
+    - echo "🔄 تحديث frontend إلى: $FRONTEND_IMAGE"
     - kubectl set image deployment/frontend frontend=$FRONTEND_IMAGE -n default
-
-    # انتظار الـ rollout للتأكد إن الـ Pods اشتغلت بنجاح
-    - echo "⏳ انتظار اكتمال rollout للـ backend..."
+    - echo "⏳ انتظار اكتمال rollout للـ backend ..."
     - kubectl rollout status deployment/backend -n default
-    - echo "⏳ انتظار اكتمال rollout للـ frontend..."
+    - echo "⏳ انتظار اكتمال rollout للـ frontend ..."
     - kubectl rollout status deployment/frontend -n default
-
-    # عرض ملخص الحالة النهائية
-    - echo "✅ حالة الـ Pods بعد النشر:"
+    - echo "✅ Pods بعد النشر:"
     - kubectl get pods -n default
   only:
     - main
-  when: manual   # للتنفيذ اليدوي بعد الموافقة
+  when: manual
