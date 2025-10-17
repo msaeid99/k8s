@@ -108,10 +108,23 @@ deploy_to_k8s:
     - |
       set -eo pipefail
       
-      # إنشاء ملف kubeconfig من المتغير
-      mkdir -p ~/.kube
-      echo "$KUBECONFIG_FILE" > ~/.kube/config
-      chmod 600 ~/.kube/config
+      # التأكد من وجود المتغير
+      echo "📋 Checking KUBECONFIG_FILE variable..."
+      if [ -z "$KUBECONFIG_FILE" ]; then
+        echo "❌ ERROR: KUBECONFIG_FILE variable is not set!"
+        exit 1
+      fi
+      
+      # استخدام الملف مباشرة
+      export KUBECONFIG="$KUBECONFIG_FILE"
+      
+      # التحقق من الملف
+      echo "📄 Kubeconfig file location: $KUBECONFIG"
+      ls -lh "$KUBECONFIG"
+      echo ""
+      echo "📝 First few lines of kubeconfig:"
+      head -n 10 "$KUBECONFIG"
+      echo ""
       
       # التحقق من الاتصال بالـ cluster
       echo "🔍 Checking cluster connection..."
@@ -138,7 +151,6 @@ deploy_to_k8s:
       echo "✅ Deployment completed! Current pods:"
       kubectl get pods -n default -o wide
   
-  # إضافة retry في حالة الفشل
   retry:
     max: 2
     when:
