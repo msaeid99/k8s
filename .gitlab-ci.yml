@@ -100,24 +100,24 @@ deploy_to_k8s:
   stage: deploy
   image:
     name: bitnami/kubectl:latest
-    entrypoint: [""]     # ← كده صح
-  before_script:
-    - mkdir -p ~/.kube
-    - echo "$KUBECONFIG_CONTENT" > ~/.kube/config
-    - kubectl version --client
-    - kubectl config get-contexts
-    - kubectl get nodes || (echo "❌ لا يمكن الاتصال بالـ cluster" && exit 1)
-  script:
-    - echo "🔄 تحديث backend إلى: $BACKEND_IMAGE"
-    - kubectl set image deployment/backend backend=$BACKEND_IMAGE -n default
-    - echo "🔄 تحديث frontend إلى: $FRONTEND_IMAGE"
-    - kubectl set image deployment/frontend frontend=$FRONTEND_IMAGE -n default
-    - echo "⏳ انتظار اكتمال rollout للـ backend ..."
-    - kubectl rollout status deployment/backend -n default
-    - echo "⏳ انتظار اكتمال rollout للـ frontend ..."
-    - kubectl rollout status deployment/frontend -n default
-    - echo "✅ Pods بعد النشر:"
-    - kubectl get pods -n default
+    entrypoint: [""]   # ضروري عشان نقدر نشغّل أوامر شِل عادية
+  when: manual
   only:
     - main
-  when: manual
+  script:
+    - |
+      set -euo pipefail
+      mkdir -p ~/.kube
+      echo "$KUBECONFIG_CONTENT" > ~/.kube/config
+
+      kubectl version --client
+      kubectl config get-contexts || true
+      kubectl get nodes
+
+      kubectl set image deployment/backend backend=$BACKEND_IMAGE -n default
+      kubectl set image deployment/frontend frontend=$FRONTEND_IMAGE -n default
+
+      kubectl rollout status deployment/backend -n default
+      kubectl rollout status deployment/frontend -n default
+
+      kubectl get pods -n default
