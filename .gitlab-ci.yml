@@ -99,20 +99,18 @@ push_images:
 deploy_to_k8s:
   stage: deploy
   image: bitnami/kubectl:latest
+  entrypoint: [""]   # <-- مهم جدًا
   before_script:
     - mkdir -p ~/.kube
     - echo "$KUBECONFIG_CONTENT" > ~/.kube/config
+    - kubectl version --client
+    - kubectl config get-contexts
   script:
-    # تحديث الـ images في Kubernetes
     - kubectl set image deployment/backend backend=$BACKEND_IMAGE -n default
     - kubectl set image deployment/frontend frontend=$FRONTEND_IMAGE -n default
-    
-    # انتظار اكتمال الـ rollout
     - kubectl rollout status deployment/backend -n default
     - kubectl rollout status deployment/frontend -n default
-    
-    # عرض حالة الـ pods
     - kubectl get pods -n default
   only:
     - main
-  when: manual  # يتطلب موافقة يدوية
+  when: manual
